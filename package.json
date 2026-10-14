@@ -1,0 +1,76 @@
+{
+  "name": "@argszero/dsh-ptc-subcall-guard",
+  "description": "Keeps a repeated PTC sub-call id out of the durable session log. deepseek-harness mints a `run_code` sub-call id as `<callId>:ptc:<n>` with `n` counted per execution, so a re-issued tool call numbers from 1 again under the same parent id. The write path accepts the repeat; the uniqueness requirement lives in the Session v4 format validator (`session-format-v3-to-v4/src/relationships.ts`, \"PTC dispatch repeats subCallId\") and is reached only when the whole log is next read, where reading is all-or-nothing. One repeat therefore costs the entire session: discussion #9677 reports a real 3,569-event session made permanently unopenable. This plugin shadows the `sessionPersistence` service instance's `open` and `create` — one own-property write, because both are prototype methods — and on the write handle each returns it renames a colliding `subCallId` to a session-unique one before the batch is appended, carrying the paired settle through a FIFO keyed by the original id, and priming the used-id set from the prefix the resume path already reads. The log it writes stays complete and loadable; the rename keeps `rootCallId`, so a nested dispatch's parent lookup still resolves. Zero runtime dependencies.",
+  "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/**/*.js",
+    "lib/types/**/*.d.ts",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/argszero/dsh-ptc-subcall-guard.git"
+  },
+  "homepage": "https://github.com/argszero/dsh-ptc-subcall-guard#readme",
+  "bugs": {
+    "url": "https://github.com/argszero/dsh-ptc-subcall-guard/issues"
+  },
+  "keywords": [
+    "cordis",
+    "deepseek-harness",
+    "dsh",
+    "plugin",
+    "ptc",
+    "run_code",
+    "subCallId",
+    "session",
+    "jsonl",
+    "guard"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.2 || ~4.0.5-alpha.1",
+    "@deepseek-ai/dsh-session-persistence": ">=0.1.7-rc.2 <0.2.0 || >=0.2.0-rc.1 <0.2.1-alpha.2 || >=0.2.1-alpha.2 <0.3.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.0.5-alpha.1",
+    "@deepseek-ai/dsh-session": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-session-format-v3-to-v4": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-session-persistence": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "0.2.1-alpha.2",
+    "@deepseek-ai/dsh-scope": "0.2.1-alpha.2",
+    "@types/node": "^24.19.1",
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "build": "tsc",
+    "pretest": "tsc",
+    "test": "node --test \"test/*.spec.mjs\"",
+    "prepublishOnly": "tsc",
+    "test:inject": "node scripts/inject-defects.mjs",
+    "probe:lines": "node scripts/probe-lines.mjs"
+  },
+  "engines": {
+    "node": "^22.19 || >=24"
+  }
+}

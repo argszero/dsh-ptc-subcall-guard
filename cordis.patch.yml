@@ -1,0 +1,43 @@
+# The @argszero/dsh-ptc-subcall-guard bundle patch: mount and go.
+#
+# Discussion #9677 reports a session of 3,569 events that can no longer be
+# opened at all:
+#
+#   SessionPersistenceCorruptionError: session "<id>": stored log is corrupt:
+#   SessionFormatError: PTC dispatch repeats subCallId
+#
+# The duplicate was accepted on the write path. The rule that rejects it lives in
+# the Session v4 format instead, and reading is all-or-nothing:
+#
+#   - `core/tools/src/ptc.ts` mints a `run_code` sub-call id as
+#     `${callId}:ptc:${n}` with `n` counted inside one `execute()` call and
+#     starting at 1 each time, so re-issuing the same tool call mints the same
+#     ids under the same parent.
+#   - `session-format-v3-to-v4/src/relationships.ts` keeps one map of PTC
+#     dispatches keyed by `subCallId` and throws `PTC dispatch repeats subCallId`
+#     on the second start carrying an id it has already seen. The entry is never
+#     removed, so the rule is "one dispatch per id in the entire log".
+#   - That walk runs only when the log is read, where a single bad relationship
+#     fails the whole session — the write path itself is never consulted.
+#
+# Nothing on the append path notices, so the id must be fixed before the batch
+# reaches it. There is no event there and no hook in the dispatcher, but
+# `SessionPersistence` is a cordis service whose `open` and `create` are
+# **prototype** methods, so one own-property write on the underlying instance
+# covers every caller — the agent loop's own `persistence.create(...)` and
+# `persistence.open(id, 'write', ...)`, each a call-time property lookup on a
+# `ctx.get` result. On the write handle they return, `append` is wrapped and a
+# colliding batch is rewritten before the original sees it.
+#
+# `inject` is declared here as well as in the plugin because the entry row is what
+# a profile composes: a guard that mounts before the service it shadows would
+# mount, log nothing, and leave the repeat unwatched.
+#
+# It changes nothing else: not what the producer mints, not the format validator,
+# not any event already on disk, and not a session that is already unloadable.
+
+- insert:
+    - id: ptc-subcall-guard
+      name: '@argszero/dsh-ptc-subcall-guard'
+      inject:
+        - sessionPersistence
